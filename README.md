@@ -15,4 +15,4 @@ dismo,
 MuMIn,
 gbm,
 rpart,
-rpart.plot,
+rpart.plot
