@@ -17,8 +17,10 @@ gbm,
 rpart,
 rpart.plot
 
-Data files are:
+Neccessary data files are:
 
-Local.Ranges.csv (local stratigraphic ranges of Late Ordovician and Early Silurian brachiopod species & genera)
+Local.Ranges.csv (local stratigraphic ranges of Late Ordovician and Early Silurian brachiopod species & genera along with ancilary information)
 
 Herrmann.Temps.csv (meridional mean annual sea surface temperature gradients from Herrmann et al., 2004, Response of Late Ordovician paleoceanography to changes in sea level, continental drift, and atmospheric pCO2: potential causes for long-term cooling and glaciation)
+
+To reproduce analyses download ZIP wih all files and modify line 17 in Process.and.Analyze.R script to set workomg directory to your local folder.
