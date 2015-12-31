@@ -20,7 +20,7 @@ library(rpart)
 library(rpart.plot)
 
 ## modify this line to set working directory
-setwd(dir="~/Dropbox/Rasmussen and Harper brach database")
+setwd(dir="~/Documents/Ord.Brach.Extinctions.Code")
 BrachData <- read.csv("Local.Ranges.csv",header=TRUE,stringsAsFactors=FALSE)
 
 ## choose whether to use Genera or Subgenera
@@ -569,4 +569,315 @@ final_data2 <- merge(final_data,range.changes,by=c("Genus","Interval"))
 ## Write the processed dataframe (as a csv file) that will then be read in by "Selectivity.Analyses.Final.R". 
 
 write.csv(final_data2,"OS.brachs.processed.csv",row.names=FALSE)
+
+## read in processed dataset, as output by "Process.Data.R".
+
+data <- read.csv("OS.brachs.processed.csv",header=TRUE)
+
+data$stage_top <- data$Interval_Top
+
+## this is a patch to update bin boundaries with new boundaries from Sadler and Cooper (2009) timescale
+
+Interval_Top <-c(457,453,449,448.5,448,447.5,447.2,446.8,446.5,446.3,446,445.6,444.6,443.7, 442.1,440.5,439.0,438.0,437.0,436.0,433.4,430.8)
+Interval_Top.new <-c(456,452,448,447.5,447,446.5,446.2,445.8,445.5,445.3,445,444.7,444.05,443.4, 442.1,440.5,439.0,438.0,437.0,436.0,433.4,430.8)
+Interval_Bottom.new <-c(460.9,456,452,448,447.5,447,446.5,446.2,445.8,445.5,445.3,445,444.7,444.05,443.4, 442.1,440.5,439.0,438.0,437.0,436.0,433.4)
+new.dates <- data.frame(Interval_Top,Interval_Top.new,Interval_Bottom.new)
+data <- merge(data,new.dates)
+data$Interval_Top <- data$Interval_Top.new
+data$stage_top <- data$Interval_Top
+data$stage_bottom <- data$Interval_Bottom.new
+data <- drop.levels(data[(data$Interval < 23),])
+
+
+##calculate lineage/mya extinction rates (using Foote, 2000 method) and make plot of extincion rate through time (figure 1 upper panel)
+
+ExRate <- function(df) mean(df$Ex)
+Foote.rate <- function(df) {
+  #df <- data[(data$stage_top == 445.6),]
+  df$Singleton <- ifelse(df$Ex==1 & df$Or ==1,1,0)
+  df2 <-df[(df$Singleton == 0),]
+  bt <- nrow(df2) - sum(df2$Ex)
+  bL <- sum(df2$Ex)
+  top <- mean(df$stage_top)
+  bottom <- mean(df$stage_bottom)
+  q <- -log(bt/(bt + bL))/(bottom-top)
+  return(q)
+}
+
+exes <- ddply(data,.(Interval_Top.new,Interval_Bottom.new),each(ExRate,Foote.rate))
+
+## define boundaries
+stage_top <-c(456,452,448,447.5,447,446.5,446.2,445.8,445.5,445.3,445,444.7,444.05,443.4, 442.1,440.5,439.0,438.0,437.0,436.0,433.4,430.8)
+stage_bottom <-c(460.9,456,452,448,447.5,447,446.5,446.2,445.8,445.5,445.3,445,444.7,444.05,443.4, 442.1,440.5,439.0,438.0,437.0,436.0,433.4)
+bin <- c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22)
+
+stage.tops <-c(456,452,448,446.5,445.5,444.7,443.4,439,436,430.2)
+stage.bottoms <-c(460.5,456,452,448,446.5,445.5,444.7,443.4,439,436)
+names <- c("San","K1","K2","K3","K4","K5","Hir.","Rhuddanian","Aeronian","Tel")
+stages <- data.frame(stage.tops,stage.bottoms,names)
+colnames(stages) <- c("stage.top","stage.bottom","stage.short")
+stages$midpoint <- (stages$stage.top + stages$stage.bottom)/2
+
+bases <- as.vector(stages$stage.bottom)
+
+plot.data <- exes
+bases <- as.vector(stages$stage.bottom)
+
+plot.data <- plot.data[(plot.data$Interval_Top.new >= 436 & plot.data$Interval_Bottom.new <= 456),]
+plot.data$midpoint <- (plot.data$Interval_Top.new + plot.data$Interval_Bottom.new)/2
+
+Epochs <- data.frame(c(450,440),c("Late Ordovician","Early Silurian"))
+colnames(Epochs) <- c("midpoint","epoch")
+
+pdf("Extinction.Rates.pdf", width = 8, height = 3)
+p <- ggplot(plot.data,aes(Interval_Top.new,Foote.rate))
+p  + theme_bw() + scale_x_reverse() + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + geom_hline(yintercept=2.6,size = .5, colour = "black")  + geom_line(data =  plot.data,aes(midpoint,Foote.rate),colour = "black") + geom_point(data=plot.data,aes(midpoint,Foote.rate),size=3,colour="black") + scale_x_reverse() + theme(panel.background = element_rect(colour="black", size =1, fill = NA)) + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + ylab(expression("Extinction rate (LMY)")) + xlab(expression("")) + theme(axis.title.x = element_text(size=16)) + theme(axis.title.y = element_text(size=16, angle = 90)) + theme(axis.text.x = element_text(size=12)) + theme(axis.text.y = element_text(size=12)) + geom_point(data=plot.data,aes(midpoint,Foote.rate),colour="black",size=2.75) + coord_cartesian(xlim = c(455.5,435.8),ylim = c(-.05,3.2)) + theme(legend.position="none") + geom_text(data = stages, aes(midpoint, 2.75, label=stage.short), size = 5, colour = "black")  + geom_hline(yintercept = -.25,colour = "black",size=.25) + geom_segment(data=stages,aes(x = stage.bottom,xend = stage.bottom,y=2.6,yend=2.9), size = .5, colour = "gray")  + geom_hline(yintercept=2.9,size = .5, colour = "black") + geom_text(data = Epochs, aes(midpoint, 3.05, label=epoch), size = 5, colour = "black") + geom_segment(aes(x = 443.4, xend=443.4,y=2.6,yend=3.2),colour="black")
+dev.off()
+
+#make a column indicating whether each genus is a Lazarus (range-through) genus in the suceeding timeslice
+data$stage <- factor(data$stage_top, levels=c(1:23))
+data$stage2 <- factor(data$stage_top, levels=c(1:23))
+data <- data[order(data$Genus, -data$stage_top),]
+nexts <- data[c("Interval","Genus","stage_top")]
+rows <- nrow(nexts)
+nexts <- nexts[(2:nrow(nexts)),]
+nexts[rows,] <- c(NA,NA,NA)
+rownames(nexts) <- seq(nrow(nexts))
+data$Gap.Next <- ifelse(data$Genus == nexts$Genus & data$Interval != (nexts$Interval -1),1,0)
+
+
+## merge in clades as defined in the treatise
+Order <- c("Athyridida","Atrypida","Billingsellida","Dictyonellida","Orthida","Orthotetida","Pentamerida","Productida","Protorthida","Rhynchonellida","Spiriferida","Strophomenida")
+Clade <- c("Clade.3","Clade.3","Clade.1","Clade.4","Clade.2","Clade.1","Clade.3","Clade.1","Clade.2","Clade.3","Clade.3","Clade.1")
+Clade.ID <- data.frame(Order,Clade)
+data <- merge(data,Clade.ID,by="Order")
+
+## calculate max occupancy for each interval
+
+max.occ <- function(df) max(df$occupancy)
+maxoccs <- ddply(data,.(Interval),each(max.occ))
+data <- merge(data,maxoccs)
+
+## round predictors to reduce false precision and so that number of categories is similar in all cases
+
+round.fac <- 10
+
+data$log.richness <- round(log(data$richness),0)
+data$occupancy <- data$occupancy/data$max.occ
+data$occupancy <- round((data$occupancy*round.fac),0)*round.fac
+data$Prop.Cratonic <- round((data$Prop.Cratonic*round.fac),0)*round.fac
+data$PropTrunc <- round((data$PropTrunc*round.fac),0)*round.fac
+data$MaxLat <- ceiling(data$MaxLat/round.fac)*round.fac
+data$MinLat <- floor(data$MinLat/round.fac)*round.fac
+data$AbsLatRange <- round((data$AbsLatRange/round.fac),0)*round.fac
+#data$AbsLatRange <- data$AbsLatRange + (runif(length(data$DepthRange))/10)
+data$MeanAbsLat <- round(data$MeanAbsLat /round.fac,0) *round.fac
+data$gcd <- round(data$gcd/1000,0)*1000
+data$log.richness <- round(data$log.richness,1)
+data$MeanDepth <- data$MeanDepth
+data$DepthRange <- round(data$DepthRange,1)
+data$MinDepth <- round(data$MinDepth,0)
+data$MaxDepth <- round(data$MaxDepth,0)
+data$Prop.North <- round((data$Prop.North*round.fac),0)*round.fac
+data$cooling.latrange <- round(data$cooling.latrange/round.fac,0)*round.fac
+data$cooling.latrange <- ifelse(data$cooling.latrange==91,90,data$cooling.latrange)
+data$cooling.start.latrange <- round(data$cooling.start.latrange/round.fac,0)*round.fac
+data$warming.latrange <- round(data$warming.latrange/round.fac,0)*round.fac
+data$warming.latrange <- ifelse(data$warming.latrange==91,90,data$warming.latrange)
+data$warming.start.latrange <- round(data$warming.start.latrange/round.fac,0)*round.fac
+data$GH.IH.extinct <- ifelse(data$cooling.latrange==0,1,0)
+data$IH.GH.extinct <- ifelse(data$warming.latrange==0,1,0)
+
+## tabulate number of extinctions per timeslice
+numex <- function(df) sum(df$Ex)
+means <- ddply(data,.(stage_top),each(numex))
+data <- merge(data,means)
+
+## remove bins with too few extinctions
+data <- data[(data$numex > 10),]
+
+## make data frame with only variables to include in models
+data2 <- data[c("stage_top","Ex","log.richness","gcd","Prop.Cratonic","PropTrunc","MaxDepth","MinDepth", "DepthRange","MaxLat","MinLat","AbsLatRange","occupancy","continents")]
+
+
+## now use "gbm.step" function from dismo package to select "best" gbm model for each timeslice. This takes a few minutes to run
+
+make.gbm <- function(df) {
+  
+  ##make weights proportional to class frequency
+  obs <- length(df$Ex)
+  exes <- sum(df$Ex)
+  ExFreq <- (exes/obs)
+  SurFreq <- (1-(exes/obs))
+  MaxFreq <- max(ExFreq,SurFreq)
+  ExWeight <- 1/(ExFreq/MaxFreq)
+  SurWeight <- 1/(SurFreq/MaxFreq)
+  train.weights <- ifelse(df$Ex==1,ExWeight,SurWeight)
+  
+  ## model for all analyses
+  gbm.mod <- gbm.step(data=df , gbm.x = 3:14, gbm.y = 2,family = "bernoulli", tree.complexity = 5,learning.rate = 0.001, bag.fraction = .6,site.weights=train.weights,n.folds=20,n.trees=100,step.size=100,max.trees=10000,silent=FALSE,n.minobsinnode=5)
+  
+  return(gbm.mod)}
+
+gbm.models <- dlply(data2,.(stage_top),failwith(NULL,make.gbm))
+
+## make dataframe of partial dependences
+partial.deps <- list()
+index <- names(gbm.models)
+for(i in index){
+  model <- gbm.models[[i]]
+  predictors <- model$var.names
+  preds <- list()
+  for(j in predictors){
+    partials <- plot.gbm(model, i.var = j, n.trees = model$n.trees, continuous.resolution = 10, return.grid = TRUE, type="response") 
+    partials$predictor <- rep(j,nrow(partials))
+    colnames(partials) <- c("value","risk","var")
+    preds[[j]] <- partials
+  }
+  preds <- do.call("rbind",preds)
+  preds$interval <- i
+  partial.deps[[i]] <- preds
+}
+partial.deps <- do.call("rbind",partial.deps)  
+
+## make dataframe of model performance stats
+perfstats <- list()
+index <- names(gbm.models)
+for (i in index){
+  cv.correlation <- gbm.models[[i]]$cv.statistics$correlation.mean
+  cv.correlation.se <- gbm.models[[i]]$cv.statistics$correlation.se
+  cv.AUC <- gbm.models[[i]]$cv.statistics$discrimination.mean
+  cv.AUC.se <- gbm.models[[i]]$cv.statistics$discrimination.se
+  cv.deviance <- gbm.models[[i]]$cv.statistics$deviance.mean
+  cv.deviance.se <- gbm.models[[i]]$cv.statistics$deviance.se
+  cv.threshold <- gbm.models[[i]]$cv.statistics$cv.threshold
+  cv.threshold.se <- gbm.models[[i]]$cv.statistics$cv.threshold.se
+  interval <- i
+  cv.correlation <- data.frame( cv.correlation, cv.correlation.se,cv.AUC,cv.AUC.se,cv.deviance, cv.deviance.se,cv.threshold,cv.threshold.se,interval)
+  perfstats[[i]] <- cv.correlation
+}
+perfstats <- do.call("rbind",perfstats)
+
+## make dataframe of relative influence
+relinf <- list()
+index <- names(gbm.models)
+for (i in index){
+  relative.influence <- data.frame(gbm.models[[i]]$contributions)
+  relative.influence$interval <- rep(i,nrow(relative.influence))
+  relinf[[i]] <- relative.influence
+}
+relative.influence <- do.call("rbind",relinf)
+
+
+## make merged dataframe, multiple relinf by cv.correlation
+plot.relinf <- merge(relative.influence,perfstats,by="interval")
+
+## merge partial dependence and relative influence data.frames, make weighted partial dependence plot
+all.plot.data <- merge(plot.relinf,partial.deps,by=c("interval","var"))
+all.plot.data$rel.inf.class <- ifelse(all.plot.data$rel.inf > 5,2,1)
+var.names <- levels(all.plot.data$var)
+
+## assign interval and predictor names and reorder
+interval2 <- c("Telychian 1","Aeronian 2","Aeronian 1", "Rhuddanian","Hirnantian","Katian 5","Katian 4","Katian 3","Katian 2","Katian 1")
+interval <- c(433.4,436,438,439,443.4,444.7,445.5,446.5,448,452)
+ints <- data.frame(interval,interval2)
+
+all.plot.data <- merge(all.plot.data,ints,by="interval")
+
+all.plot.data$interval2 <- factor(all.plot.data$interval2 , levels=c("Katian 1","Katian 2","Katian 3", "Katian 4","Katian 5", "Hirnantian", "Rhuddanian","Aeronian 1", "Aeronian 2", "Telychian 1"))
+
+predictor <- all.plot.data$var
+predictor <- revalue(predictor,c("AbsLatRange"="Paleolatitude Range","continents"="Num. Paleocontinents","DepthRange"="Depth Range","gcd" = "Great Circle Dist.","log.richness"="Log Richness","MaxDepth"="Maximum Depth","MaxLat"="Max. Paleolatitude","MinDepth"="Minimum Depth","MinLat"="Min. Paleolatitude","occupancy"="Grid Cell Occupancy","Prop.Cratonic"="% Cratonic","PropTrunc"="% Discontinuous"))
+all.plot.data$predictor <- predictor
+
+all.plot.data$predictor <- factor(all.plot.data$predictor, levels=c("Log Richness","Great Circle Dist.","Grid Cell Occupancy","Num. Paleocontinents","% Discontinuous", "% Cratonic","Min. Paleolatitude","Max. Paleolatitude","Paleolatitude Range","Minimum Depth","Maximum Depth","Depth Range"))
+
+## rescale values to max
+
+maxval <- function(df) max(df$value)
+maxvals <- ddply(all.plot.data,.(predictor),each(maxval))
+all.plot.data2 <- merge(all.plot.data,maxvals)
+all.plot.data2$value2 <- all.plot.data2$value/all.plot.data2$maxval
+
+all.plot.data2 <- all.plot.data2[(all.plot.data2$predictor != "Pedunculate" & all.plot.data2$predictor != "Mean Paleolatitude" & all.plot.data2$predictor != "Mean Depth"),]
+
+## make partial dependence plot (Figure 1 lower panel)
+
+pdf("Partial.Dependence.pdf", width = 10, height = 8)
+p <- ggplot(all.plot.data2,aes(value2,risk,colour=rel.inf))
+p + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_grid(predictor~interval2,scales="free_x")  + theme_bw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value (proportion of maximum)") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10),strip.text.y = element_text(size=10,angle=0)) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,angle=-90,hjust=0),axis.text.y=element_text(size=8)) 
+dev.off()
+
+## make partial dependence plot just for major predictors in Katian 5
+all.plot.data3 <- all.plot.data[(all.plot.data$interval == "444.7"),]
+all.plot.data3 <- all.plot.data3[(all.plot.data3$predictor == "% Cratonic" | all.plot.data3$predictor == "% Discontinuous" | all.plot.data3$predictor == "Paleolatitude Range" | all.plot.data3$predictor == "Minimum Depth"),]
+
+pdf("Katian.5.Partial.Dependence.pdf", width = 9, height = 8)
+p <- ggplot(all.plot.data3,aes(value,risk,colour=rel.inf))
+p + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_wrap(~predictor,scales="free_x")  + theme_linedraw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10,colour="black")) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,hjust=0),axis.text.y=element_text(size=8)) 
+dev.off()
+
+##make Katian 5 relative influence plot
+K5influence <- all.plot.data[, c("interval2","var", "predictor", "rel.inf")]
+K5influence <- unique(K5influence[(K5influence$interval2 == "Katian 5"),])
+K5influence <- K5influence[order(K5influence$rel.inf),]
+names <- c(as.list(K5influence$predictor))
+names <- c(do.call("cbind",names)) 
+K5influence$predictor <- factor(K5influence$predictor,levels(K5influence$predictor)[names])
+
+## make list of Katian5 factors to retain (only those with more influence than expected)
+K5.med <- median(K5influence$rel.inf)
+K5.retain  <- K5influence[(K5influence$rel.inf >= 100/12),]
+K5.names <- c(as.list(as.character(K5.retain$var)))
+K5.names <- c(do.call("cbind",K5.names))
+
+K5.includes1 <- c("Ex",K5.names)
+K5.includes2 <- c("Ex",K5.names,"GH.IH.extinct","IH.GH.extinct")
+
+K5.data <- data[(data$Interval_Top.new == 444.7),]
+
+K5.data1 <- K5.data[K5.includes1]
+K5.data2 <- K5.data[K5.includes2]
+
+## further cull the list of variables, include only those variables with conditional average p values of < .05 in the set of all possible models with deltaAICc values < 4
+
+model.full <- glm(Ex~.,data = K5.data1, family="binomial",na.action="na.fail")
+d.mod <- dredge(model.full,rank = "AICc",beta=FALSE)
+avg.mod <- model.avg(d.mod, subset = delta < 4)
+summary(avg.mod)
+
+## now include these variables in three alternative models, two of which include predictions from climate change scenarios (greenhouse to icehouse and icehouse to greenhouse)
+
+Cand.mod <- list()
+Cand.mod[[1]] <- glm(Ex ~ AbsLatRange  + MinDepth + PropTrunc + Prop.Cratonic, data =K5.data2,family=binomial(link = "logit"))
+Cand.mod[[2]] <- glm(Ex ~ AbsLatRange  + MinDepth + PropTrunc + Prop.Cratonic + GH.IH.extinct, data = K5.data2,family=binomial(link = "logit"))
+Cand.mod[[3]] <- glm(Ex ~ AbsLatRange + MinDepth  + PropTrunc + Prop.Cratonic+ IH.GH.extinct, data = K5.data2,family=binomial(link = "logit"))
+
+Modnames = c("Neutral","Greenhouse-Icehouse","Icehouse-Greenhouse")
+
+mod.avg <- aictab(cand.set = Cand.mod, modnames = Modnames)
+
+writeLines(capture.output(mod.avg),con="Table.1.txt")
+
+
+## make classification tree (Figure 3) using the variables in the best model
+
+K5.data3 <- K5.data2
+K5.data3$Extinct <- ifelse(K5.data3$Ex == 1,"extinct","survive")
+K5.data3$Prediction <- ifelse(K5.data3$GH.IH.extinct == 1,"extinct","survive")
+K5tree <- rpart(Extinct ~ PropTrunc + Prop.Cratonic + Prediction + AbsLatRange + MinDepth, data=K5.data3, na.action = na.pass, method = "class",xval=20)
+
+y <- ifelse(K5tree$frame$yval==1,K5tree$frame$dev/K5tree$frame$wt,1-K5tree$frame$dev/K5tree$frame$wt)
+
+max <- 100
+min <- 0
+cols <- rainbow(99,end=.5,.65)[
+  ifelse(y > .5, (y-min)  * (50-1)  / (y[1]-min) + 1,
+         (y-min)  * (50-1)  / (y[1]-min) + 1)]
+
+pdf("Classification.Tree.pdf", width = 7, height = 7)
+prp(K5tree,extra=105,branch.type=5,box.col=cols,branch.col=cols)
+dev.off()
+
+
 
