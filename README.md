@@ -23,4 +23,4 @@ Local.Ranges.csv (local stratigraphic ranges of Late Ordovician and Early Siluri
 
 Herrmann.Temps.csv (meridional mean annual sea surface temperature gradients from Herrmann et al., 2004, Response of Late Ordovician paleoceanography to changes in sea level, continental drift, and atmospheric pCO2: potential causes for long-term cooling and glaciation)
 
-To reproduce analyses download ZIP wih all files and modify line 17 in Process.and.Analyze.R script to set working directory to your local folder.
+To reproduce analyses download ZIP with all files and modify line 17 in Process.and.Analyze.R script to set working directory to your local folder.
