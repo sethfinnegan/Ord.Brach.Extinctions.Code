@@ -8,7 +8,7 @@ plyr,
 miscTools,
 reshape2,
 ggplot2,
-fields)
+fields,
 PBSmapping,
 AICcmodavg,
 dismo,
