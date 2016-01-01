@@ -1,6 +1,6 @@
-## This script performs the analyses reported in the main text and reproduces (in rough form) figures 1 and 3. It begins by reading in local ranges of genera from the raw data file ("Local.Ranges.csv") and processessing these data to extract global first and last appearances of each genus and extimates of the geographic distribution of the genus in each timeslice (LINES ## through ###). It then uses the distribution of each genus on each paleocontinental block and modeled SST estimates from Herrmann et al. 2004 to estimate the thermal tolerance range of each genus on each paleoncontinental block and then determine whether it would continue to be able to access coastal habitats within its thermal tolerance ranges in a modeled climate state shift (greenhouse to icehouse and, for comparison, icehouse to greenhouse)(LINES ## through ###).  Paleocontinental blocks are defined based on paleolatitudinal reconstructions from Torsvik (TODO: get proper reference) as figured in Rasmussen and Harper 2011. Blocks that were joined or so close that the distance would not have presented a substantial dispersal barrier (for example Avalonia and Baltica) were considered as single blocks.  See supplemental materials for further information about blocks used. The data frame output by this script is used as input for analyses of extinction patterns within each timeslice (see Appendix S2: "Selectivity.Analyses.R")
+## This script performs the analyses reported in the main text and reproduces (in rough form) figures 1 and 3. It begins by reading in local ranges of genera from the raw data file ("Local.Ranges.csv") and processessing these data to extract global first and last appearances of each genus and extimates of the geographic distribution of the genus in each timeslice (LINES ## through ###). It then uses the distribution of each genus on each paleocontinental block and modeled SST estimates from Herrmann et al. 2004 to estimate the thermal tolerance range of each genus on each paleoncontinental block and then determine whether it would continue to be able to access coastal habitats within its thermal tolerance ranges in a modeled climate state shift (greenhouse to icehouse and, for comparison, icehouse to greenhouse)(LINES ## through ###).  Paleocontinental blocks are defined based on paleolatitudinal reconstructions from Torsvik (TODO: get proper reference) as figured in Rasmussen and Harper 2011. Blocks that were joined or so close that the distance would not have presented a substantial dispersal barrier (for example Avalonia and Baltica) were considered as single blocks.  See supplemental materials for further information about blocks used. The data frame output by this script is then used as input for analyses of extinction patterns within each timeslice and comparisons among alternative latest Katian (Katian 5) models.
 
-## To run this script it is neccessary to modify line 17 to set to your local directory
+## L
 
 ## Script takes 10-20 minutes to run depending on processing power
 
@@ -293,11 +293,10 @@ states <- c("Icehouse summer SST","Icehouse winter SST","Greenhouse summer SST",
 states <- cbind(model,states)
 temps2 <- merge(temps2,states)
 
-## Make a temperature profile plot to include in supplemental materials.
+## Make a temperature profile plot to compare icehouse and greenhouse models.
 
 pdf("~/Dropbox/Rasmussen and Harper brach database/H&R paper drafts/Temp.Profiles.pdf", width = 8, height = 4)
-p <- ggplot(temps2,aes(latitude,temp.,colour=states,linetype=states))
-p + geom_line() + scale_colour_manual(values =c("red","red","blue","blue"),name=" ") + scale_linetype_manual(values =c(1,2,1,2),name=" ") + theme_bw() + ylab("mean sea surface temperature") + xlab("degrees absolute latitude") + scale_x_continuous(breaks=c(0,30,60,90))
+print(p <- ggplot(temps2,aes(latitude,temp.,colour=states,linetype=states)) + geom_line() + scale_colour_manual(values =c("red","red","blue","blue"),name=" ") + scale_linetype_manual(values =c(1,2,1,2),name=" ") + theme_bw() + ylab("mean sea surface temperature") + xlab("degrees absolute latitude") + scale_x_continuous(breaks=c(0,30,60,90)))
 dev.off()
 
 ## get ranges of genera on each continent
@@ -589,7 +588,43 @@ data$stage_bottom <- data$Interval_Bottom.new
 data <- drop.levels(data[(data$Interval < 23),])
 
 
-##calculate lineage/mya extinction rates (using Foote, 2000 method) and make plot of extincion rate through time (figure 1 upper panel)
+### make figure 2: proportional extinction of genera within depth:palaeolatitude bins.  Assumes genera are present throughout their depth and palaeolatitude ranges
+
+lats <- seq(-90,90,by=5)
+depths <- seq(1,6,by=1)
+lat.depths <- merge(lats,depths,all=TRUE)
+stages <- sort(rep(unique(data2$Interval_Top),length(lat.depths[,1])))
+lat.depths <- data.frame(lat.depths,stages)
+colnames(lat.depths) <- c("Latitude","Depth","Interval_Top")
+
+Subset.Genera <- function(df){
+  genera <- data2[(df$Latitude <= data2$MaxLatRel  & df$Latitude >= data2$MinLatRel  & df$Depth <= data2$MaxDepth & df$Depth >= data2$MinDepth  & data2$Interval_Top == df$Interval_Top),] 
+  genera
+}
+plot.gen <- ddply(lat.depths,.(Latitude,Depth,Interval_Top),each(Subset.Genera))
+
+Prop.Ex <- function(df) mean(df$Ex)*100
+Num.Gen <- function(df) length(df$Ex)
+
+Gen.Ex <- ddply(plot.gen,.(Interval_Top,Latitude,Depth),each(Prop.Ex,Num.Gen))
+
+## drop bins containing fewer than 3 genera
+Gen.Ex$Prop.Ex <- ifelse(Gen.Ex$Num.Gen < 3,NA,Gen.Ex$Prop.Ex)
+
+Stage <- c("Katian 1","Katian 2","Katian 3","Katian 4","Katian 5","Hirnantian","Rhuddanian","Aeronian 1","Aeronian 2")
+Interval_Top <- c(453.0,449.0,447.5,446.5,445.6,443.7,439.0,438.0,436.0)
+
+stages <- data.frame(Interval_Top,Stage)
+
+Gen.Ex2 <- merge(Gen.Ex,stages,by="Interval_Top",all.x=FALSE)
+
+Gen.Ex2$Stage <- factor(Gen.Ex2$Stage , levels=c("Katian 1","Katian 2","Katian 3", "Katian 4", "Katian 5", "Hirnantian", "Rhuddanian", "Aeronian 1","Aeronian 2"))
+
+pdf("latitude.vs.depth.prop.extinction.pdf", width = 6, height = 7)
+print(p <- ggplot(Gen.Ex2,aes(Latitude,Depth,fill=Prop.Ex)) + geom_tile(colour='black') + facet_wrap(~Stage,ncol=1) + scale_y_reverse(breaks =c(1,3,5)) + scale_fill_gradient2(low="dodgerblue",mid="chartreuse",high="orange",midpoint=30,"% Extinction",na.value="lightgray")+ theme_bw() + theme(strip.text.x = element_text(size = 9)) +theme(strip.background = element_blank()) + ylab("Depth (Brachiopod Assemblage Zone)") + xlab("Paleolatitude") + coord_cartesian(xlim=c(-90,40)) + scale_x_reverse(breaks=c(-60,-30,0,30)) + theme(legend.position = "top"))
+dev.off()
+
+##calculate lineage/mya extinction rates (using Foote, 2000 method) and make plot of extinction rate through time (figure 1 upper panel)
 
 ExRate <- function(df) mean(df$Ex)
 Foote.rate <- function(df) {
@@ -630,8 +665,7 @@ Epochs <- data.frame(c(450,440),c("Late Ordovician","Early Silurian"))
 colnames(Epochs) <- c("midpoint","epoch")
 
 pdf("Extinction.Rates.pdf", width = 8, height = 3)
-p <- ggplot(plot.data,aes(Interval_Top.new,Foote.rate))
-p  + theme_bw() + scale_x_reverse() + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + geom_hline(yintercept=2.6,size = .5, colour = "black")  + geom_line(data =  plot.data,aes(midpoint,Foote.rate),colour = "black") + geom_point(data=plot.data,aes(midpoint,Foote.rate),size=3,colour="black") + scale_x_reverse() + theme(panel.background = element_rect(colour="black", size =1, fill = NA)) + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + ylab(expression("Extinction rate (LMY)")) + xlab(expression("")) + theme(axis.title.x = element_text(size=16)) + theme(axis.title.y = element_text(size=16, angle = 90)) + theme(axis.text.x = element_text(size=12)) + theme(axis.text.y = element_text(size=12)) + geom_point(data=plot.data,aes(midpoint,Foote.rate),colour="black",size=2.75) + coord_cartesian(xlim = c(455.5,435.8),ylim = c(-.05,3.2)) + theme(legend.position="none") + geom_text(data = stages, aes(midpoint, 2.75, label=stage.short), size = 5, colour = "black")  + geom_hline(yintercept = -.25,colour = "black",size=.25) + geom_segment(data=stages,aes(x = stage.bottom,xend = stage.bottom,y=2.6,yend=2.9), size = .5, colour = "gray")  + geom_hline(yintercept=2.9,size = .5, colour = "black") + geom_text(data = Epochs, aes(midpoint, 3.05, label=epoch), size = 5, colour = "black") + geom_segment(aes(x = 443.4, xend=443.4,y=2.6,yend=3.2),colour="black")
+print(p <- ggplot(plot.data,aes(Interval_Top.new,Foote.rate)) + theme_bw() + scale_x_reverse() + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + geom_hline(yintercept=2.6,size = .5, colour = "black")  + geom_line(data =  plot.data,aes(midpoint,Foote.rate),colour = "black") + geom_point(data=plot.data,aes(midpoint,Foote.rate),size=3,colour="black") + scale_x_reverse() + theme(panel.background = element_rect(colour="black", size =1, fill = NA)) + theme(panel.grid.major = element_blank()) + theme(panel.grid.minor = element_blank()) + ylab(expression("Extinction rate (LMY)")) + xlab(expression("")) + theme(axis.title.x = element_text(size=16)) + theme(axis.title.y = element_text(size=16, angle = 90)) + theme(axis.text.x = element_text(size=12)) + theme(axis.text.y = element_text(size=12)) + geom_point(data=plot.data,aes(midpoint,Foote.rate),colour="black",size=2.75) + coord_cartesian(xlim = c(455.5,435.8),ylim = c(-.05,3.2)) + theme(legend.position="none") + geom_text(data = stages, aes(midpoint, 2.75, label=stage.short), size = 5, colour = "black")  + geom_hline(yintercept = -.25,colour = "black",size=.25) + geom_segment(data=stages,aes(x = stage.bottom,xend = stage.bottom,y=2.6,yend=2.9), size = .5, colour = "gray")  + geom_hline(yintercept=2.9,size = .5, colour = "black") + geom_text(data = Epochs, aes(midpoint, 3.05, label=epoch), size = 5, colour = "black") + geom_segment(aes(x = 443.4, xend=443.4,y=2.6,yend=3.2),colour="black"))
 dev.off()
 
 #make a column indicating whether each genus is a Lazarus (range-through) genus in the suceeding timeslice
@@ -804,8 +838,7 @@ all.plot.data2 <- all.plot.data2[(all.plot.data2$predictor != "Pedunculate" & al
 ## make partial dependence plot (Figure 1 lower panel)
 
 pdf("Partial.Dependence.pdf", width = 10, height = 8)
-p <- ggplot(all.plot.data2,aes(value2,risk,colour=rel.inf))
-p + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_grid(predictor~interval2,scales="free_x")  + theme_bw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value (proportion of maximum)") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10),strip.text.y = element_text(size=10,angle=0)) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,angle=-90,hjust=0),axis.text.y=element_text(size=8)) 
+print(p <- ggplot(all.plot.data2,aes(value2,risk,colour=rel.inf)) + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_grid(predictor~interval2,scales="free_x")  + theme_bw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value (proportion of maximum)") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10),strip.text.y = element_text(size=10,angle=0)) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,angle=-90,hjust=0),axis.text.y=element_text(size=8))) 
 dev.off()
 
 ## make partial dependence plot just for major predictors in Katian 5
@@ -813,8 +846,7 @@ all.plot.data3 <- all.plot.data[(all.plot.data$interval == "444.7"),]
 all.plot.data3 <- all.plot.data3[(all.plot.data3$predictor == "% Cratonic" | all.plot.data3$predictor == "% Discontinuous" | all.plot.data3$predictor == "Paleolatitude Range" | all.plot.data3$predictor == "Minimum Depth"),]
 
 pdf("Katian.5.Partial.Dependence.pdf", width = 9, height = 8)
-p <- ggplot(all.plot.data3,aes(value,risk,colour=rel.inf))
-p + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_wrap(~predictor,scales="free_x")  + theme_linedraw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10,colour="black")) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,hjust=0),axis.text.y=element_text(size=8)) 
+print(p <- ggplot(all.plot.data3,aes(value,risk,colour=rel.inf)) + geom_hline(yintercept=.5,colour="black") + geom_line(lineend = "round",size=1.5) + facet_wrap(~predictor,scales="free_x")  + theme_linedraw() + ylab("Marginal effect of predictor on extinction risk") + xlab("Predictor value") + theme(strip.background = element_blank()) + theme(strip.text.x = element_text(size=10,colour="black")) + scale_linetype_manual(values=c(3,1),guide=FALSE) + theme(axis.title.x = element_text(size=12,colour="black")) + theme(axis.title.y =  element_text(size=12, angle = 90,colour="black")) + scale_y_continuous(limits=c(.15,.8),breaks=c(.25,.5,.75))  + guides(colour=guide_legend(title="Relative influence of predictor on extinction risk:",override.aes = list(size=3))) + guides(size=guide_legend(title="% relative influence of predictor on extinction risk:")) + theme(legend.direction = "horizontal", legend.position = "bottom") + theme(legend.text=element_text(size=10)) +  theme(legend.title=element_text(size=12,face="plain")) + scale_colour_gradient2(low="black",high="orange",mid="red",midpoint=15) + theme(axis.text.x=element_text(size=8,hjust=0),axis.text.y=element_text(size=8)))
 dev.off()
 
 ##make Katian 5 relative influence plot
